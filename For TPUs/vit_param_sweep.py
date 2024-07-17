@@ -66,8 +66,17 @@ accumulation_iter = 8
 # parseargs
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--weight_ps', type = int, default = None, choices = [None, 8, 16, 32])
-parser.add_argument('--temperature', type = float, default = 0.5)
+parser.add_argument('--weight_ps',
+                    type = int,
+                    default = None,
+                    choices = [None, 8, 16, 32],
+                    help = 'The patch size for calculating keypoint density in KAMIM. Possible choices are None (for SimMIM), 8, 16, and 32.')
+parser.add_argument('--temperature',
+                    type = float,
+                    default = None,
+                    choices = [0.1, 0.25, 0.5, 1.0, 2.5],
+                    help = 'The temperature value for KAMIM. Possible choices are 0.1, 0.25, 0.5, 1.0, 2.5.')
+
 
 args = parser.parse_args()
 

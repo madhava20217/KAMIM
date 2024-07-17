@@ -28,7 +28,7 @@ from utils.dataset_loaders import get_dataset
 
 # config
 from utils.config import hyperparams_train as hyperparameters
-from utils.config import parameters_base as parameters
+from utils.config import ARCHITECTURES                  
 from utils.config import LR_DECAY
 
 # eval helper
@@ -41,13 +41,19 @@ wandb.login()
 id = wandb.util.generate_id()
 NUM_WORKERS = 24
 PIN_MEMORY = True
-
-model_name = parameters['model_name']
-
 # parseargs
 import argparse
 parser = argparse.ArgumentParser()
 
+parser.add_argument('--model',
+                    type = str,
+                    default = 'vit_b',
+                    help = "Model to train. Will load the config from utils.config.py. For ViT-T, use 'vit_t', for ViT-S, use 'vit-s', and for ViT-B, use 'vit_b'. In order to change parameters, please modify the code there.")
+parser.add_argument('--detector',
+                    type = str,
+                    default = None,
+                    choices = [None, 'fast', 'orb', 'sift'],
+                    help = "The detector to use for obtaining keypoints. Valid options are 'fast', 'orb' and 'sift'. For SimMIM, use 'None'.")
 parser.add_argument("--linear_probing",
                     action = 'store_false',
                     help = 'Add this flag if you want to conduct linear probing. Absence of this flag will make the training default to finetuning.')
@@ -96,6 +102,12 @@ parser.add_argument('--linprobe_layer',
 
 args = parser.parse_args()
 
+cfg = args.model
+parameters = ARCHITECTURES[cfg]
+
+model_name = parameters['model_name']
+
+kp_detector = args.detector
 linprobe_layer = args.linprobe_layer
 finetuning = args.linear_probing
 KAMIM = args.KAMIM
@@ -127,16 +139,14 @@ DEVICE = torch.device(device)
 
 # %%
 PROJECT_NAME = f'KAMIM ({process})'
-RUN_NAME = f'[{dataset}] {model_name} [{algo}]'
-MODEL_SAVE_PATH = f'Benchmarks/{dataset}/{model_name}/{process}/{algo}/checkpoint'  # IN Weight
-# WEIGHT_PATH = f'Models/{dataset}/{model_name}/{algo}/checkpoint_final.pth'
-WEIGHT_PATH = f'Models/{model_name}/{algo}/checkpoint_final.pth'
+RUN_NAME = f'[{dataset}] [{kp_detector}] {model_name} [{algo}]'
+MODEL_SAVE_PATH = f'Benchmarks/{dataset}/{model_name}/{process}/{algo}/checkpoint'
+WEIGHT_PATH = f'Models/{dataset}/{model_name}/{algo}/checkpoint_final.pth'
 
 if KAMIM is True:
-    # WEIGHT_PATH = f'Models/{dataset}/{model_name}/{algo} - {weight_ps} - {TEMPERATURE}/checkpoint_final.pth'
-    WEIGHT_PATH = f'Models/{model_name}/{algo} - {weight_ps} - {TEMPERATURE}/checkpoint_final.pth'      # IN weight
-    RUN_NAME = f'[{dataset}] {model_name} [{algo}] [WP_Size = {weight_ps}] [T = {TEMPERATURE}]'
-    MODEL_SAVE_PATH = f'Benchmarks/{dataset}/{model_name}/{process}/{algo} - {weight_ps} - {TEMPERATURE}/checkpoint'
+    WEIGHT_PATH = f'Models/{dataset}/{model_name}/{algo} - {weight_ps} - {TEMPERATURE}/{kp_detector}/checkpoint_final.pth'      # IN weight
+    RUN_NAME = f'[{dataset}] [{kp_detector}] {model_name} [{algo}] [WP_Size = {weight_ps}] [T = {TEMPERATURE}]'
+    MODEL_SAVE_PATH = f'Benchmarks/{dataset}/{model_name}/{process}/{algo} - {weight_ps} - {TEMPERATURE}/{kp_detector}/checkpoint'
 print(WEIGHT_PATH)
 
 # %%
@@ -242,8 +252,9 @@ final_checkpoint = torch.load(WEIGHT_PATH,
                                   'cuda:1': 'cpu', 
                                   'cuda:0': 'cpu'
                                   }
-                              )['model_state_dict']
-
+                              )
+if type(final_checkpoint) == dict and 'model_state_dict' in final_checkpoint.keys():
+    final_checkpoint = final_checkpoint['model_state_dict']
 model_state_dict = final_checkpoint
 
 backbone.load_state_dict(model_state_dict)
@@ -325,6 +336,7 @@ wandb.init(
                 'KAMIM': KAMIM,
                 'temperature': TEMPERATURE,
                 'Weight patch size': weight_ps,
+                'Detector': kp_detector,
             }, 
         'linprobe_layer': linprobe_layer,
         # 'LR_decay': LR_DECAY
@@ -460,6 +472,12 @@ for epoch in range(CHKPT+1, EPOCHS+warmup_epochs):        # change back to 1
                     'epoch': epoch,
                     'model_state_dict':model.state_dict(),
                     'optim_state_dict': optim.state_dict(),
+                    'dataset': dataset,
+                    'detector': kp_detector,
+                    'train_loss': train_loss / samples,
+                    'val_loss': val_loss/val_samples,
+                    'val_acc_top1': val_acc_top1.compute().item(),
+                    'val_acc_top5': val_acc_top5.compute().item()
                     },
                 save_path
                 )

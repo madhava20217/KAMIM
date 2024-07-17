@@ -29,7 +29,6 @@ hyperparams_pretrain = {
     'warmup_epochs': 10
 }
 
-
 # VITs
 parameters_tiny = {
     'batch_size': 2048,
@@ -153,3 +152,12 @@ parameters_Swin_tiny = {
     'batch_size_finetuning': 2048,
     'batch_size_linear_probe': 2048,
 }
+
+# ARCHITECTURES
+
+ARCHITECTURES = {'vit_t': parameters_tiny,
+                 'vit_s': parameters_small,
+                 'vit_b': parameters_base,
+                 'swin_t':parameters_Swin_tiny,
+                 'swin_b':parameters_Swin_base,
+                 }

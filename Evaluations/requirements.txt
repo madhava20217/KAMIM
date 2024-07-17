@@ -1,0 +1,12 @@
+torch>=2.2
+torchvision>=0.17
+pandas==2.2.2
+numpy==1.26.4
+transformers==4.38.1
+torchmetrics>=1.3.1
+timm==0.5.4
+fastai==2.7.15
+torch-fidelity==0.3.0
+tqdm>=4.64.1
+matplotlib>=3.8.3
+einops==0.6.0

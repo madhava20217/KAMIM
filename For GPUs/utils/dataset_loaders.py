@@ -9,8 +9,6 @@ import random
 from PIL import Image
 import glob
 import os
-import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
 from torchvision.transforms import v2
 import cv2
 
@@ -144,6 +142,7 @@ class KAMIM_Dataset(torch.utils.data.Dataset):
                  mask_patch_size = 32,
                  model_patch_size = 16,
                  mask_ratio = 0.6,
+                 kp_detector = 'fast',
                  ):
         '''Wrapper for the pretraining dataset
         
@@ -156,7 +155,10 @@ class KAMIM_Dataset(torch.utils.data.Dataset):
         6. normalization: post conversion normalization for base images
         7. mask_patch_size: the mask generator patch size for SimMIM
         8. model_patch_size: the patch size of the model inputs
-        9. mask_ratio: the masking ratio for the patches'''
+        9. mask_ratio: the masking ratio for the patches
+        10. kp_detector: the keypoint detector to be used. Must be one out of 'fast', 'orb', or 'sift'.'''
+        assert kp_detector in [None, 'fast', 'sift', 'orb']
+        
         self.base_dataset = base_dataset
         self.mask_generator = MaskGenerator(input_size = dimension[0],
                                             mask_patch_size = mask_patch_size,
@@ -181,6 +183,7 @@ class KAMIM_Dataset(torch.utils.data.Dataset):
             normalization
         ])
         self.returnFAST = return_FAST
+        self.detector = kp_detector
         
     def __len__(self):
         return len(self.base_dataset)
@@ -196,7 +199,16 @@ class KAMIM_Dataset(torch.utils.data.Dataset):
 
         else: 
             img_as_arr = img.permute(1,2,0).numpy()
-            kp = cv2.FastFeatureDetector_create().detect(img_as_arr,None)
+            
+            if self.detector == 'fast':
+                kp = cv2.FastFeatureDetector_create().detect(img_as_arr,None)
+            elif self.detector == 'sift':
+                kp = cv2.SIFT_create().detect(img_as_arr, None)
+            elif self.detector == 'orb':
+                kp = cv2.ORB_create().detect(img_as_arr, None)
+            elif self.detector == 'superpoint':
+                # TODO implement superpoint
+                pass            
             feat = cv2.drawKeypoints(np.zeros_like(img_as_arr), kp, None, color = (255, 0, 0))[:, :, 0]
             
             feat = torch.tensor(feat)[None, :, :].sign().float()

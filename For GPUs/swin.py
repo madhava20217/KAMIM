@@ -28,9 +28,8 @@ from utils.utils import get_pretrain_dataset_params
 from utils.KAMIM import per_patch_importance
 
 # config
-from utils.config import hyperparams_pretrain as hyperparameters
-from utils.config import parameters_Swin_base as parameters
-# from utils.config import SAVE_INTERVAL, MODEL_SAVE_INTERVAL
+from utils.config import hyperparams_pretrain as hyperparameters        # load hyperparameters from config
+from utils.config import ARCHITECTURES          
 
 torch.set_num_threads(8)
 
@@ -45,6 +44,15 @@ PIN_MEMORY = True
 # parseargs
 import argparse
 parser = argparse.ArgumentParser()
+parser.add_argument('--model',
+                    type = str,
+                    default = 'swin_t',
+                    help = "Model to train. Will load the config from utils.config.py. For Swin-T, use 'swin_t', and for Swin-B, use 'swin_b'. In order to change parameters, please modify the code there.")
+parser.add_argument('--detector',
+                    type = str,
+                    default = None,
+                    choices = [None, 'fast', 'orb', 'sift'],
+                    help = "The detector to use for obtaining keypoints. Valid options are 'fast', 'orb' and 'sift'. For SimMIM, use 'None'.")
 parser.add_argument("--KAMIM",
                     action = 'store_true',
                     help = 'The pretraining style to use. Add this flag for using KAMIM.')
@@ -82,6 +90,9 @@ parser.add_argument('--model_save_interval',
 
 args = parser.parse_args()
 
+kp_detector = args.detector
+cfg = args.model
+parameters = ARCHITECTURES[cfg]
 KAMIM = args.KAMIM                  # algo
 weight_ps = args.weight_ps              # weight patch size, only used for KAMIM
 TEMPERATURE = args.temperature          # temperature, only used for KAMIM
@@ -108,12 +119,12 @@ DEVICE = torch.device(device)
 
 
 PROJECT_NAME = 'KAMIM'
-RUN_NAME = f'[{dataset}] {model_name} [{algo}]'
+RUN_NAME = f'[{dataset}] [{kp_detector}] {model_name} [{algo}]'
 MODEL_SAVE_PATH = f'Models/{dataset}/{model_name}/{algo}/checkpoint'
 
 if KAMIM is True:
-    RUN_NAME = f'[{dataset}] {model_name} [{algo}] [WP_Size = {weight_ps}] [T = {TEMPERATURE}]'
-    MODEL_SAVE_PATH = f'Models/{dataset}/{model_name}/{algo} - {weight_ps} - {TEMPERATURE}/checkpoint'
+    RUN_NAME = f'[{dataset}] [{kp_detector}] {model_name} [{algo}] [WP_Size = {weight_ps}] [T = {TEMPERATURE}]'
+    MODEL_SAVE_PATH = f'Models/{dataset}/{model_name}/{algo} - {weight_ps} - {TEMPERATURE}/{kp_detector}/checkpoint'
     
     
 # %%
@@ -174,10 +185,11 @@ warmup_epochs    = hyperparameters['warmup_epochs']
 dataset_params = get_pretrain_dataset_params(DIMENSION)
 pretrain_data = KAMIM_Dataset(base_dataset,
                     **dataset_params,
-                    return_FAST=True,
+                    return_FAST= KAMIM,
                     mask_patch_size=MASKING_PATCH_SIZE,
                     model_patch_size=MODEL_PATCH_SIZE,
-                    mask_ratio = MASK_RATIO)
+                    mask_ratio = MASK_RATIO,
+                    kp_detector=kp_detector)
 # dataloader
 pretrain_dataloader = torch.utils.data.DataLoader(pretrain_data,
                                                   batch_size = BATCH_SIZE//accumulation_iter,
@@ -271,6 +283,7 @@ wandb.init(
                 'KAMIM': KAMIM,
                 'temperature': TEMPERATURE,
                 'Weight patch size': weight_ps,
+                'Keypoint detector': kp_detector,
             }
     },
 )
@@ -400,6 +413,8 @@ for epoch in range(CHKPT+1, EPOCHS+warmup_epochs):        # change back to 1
                     'optim_state_dict': optim.state_dict(),
                     # 'scheduler_state_dict': lr_scheduler.state_dict(),
                     'reconstruction_loss': reconst_loss/samples,
+                    'dataset': dataset,
+                    'detector': kp_detector,
                     },
                 save_path
                 )

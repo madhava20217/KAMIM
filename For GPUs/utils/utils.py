@@ -1,5 +1,4 @@
 import torchvision
-import kornia.augmentation as K
 import torch
 
 from torchvision.transforms import v2
@@ -91,18 +90,6 @@ def get_cpu_augment(DIMENSION):
     )
     ])
     return augment
-
-def get_gpu_augment():
-    gpu_augment = K.AugmentationSequential(
-    # K.RandomAffine(20, (0.15, 0.15), (0.85, 1.15), 15),
-    K.auto.TrivialAugment(),
-    K.RandomErasing(),
-    K.Normalize(
-        mean = [0.485, 0.456, 0.406],
-        std =  [0.229, 0.224, 0.225]
-        )
-    )
-    return gpu_augment
 
 def batch_augment(n_classes):
     batch_augment = v2.RandomChoice([

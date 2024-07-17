@@ -27,8 +27,8 @@ from utils.utils import get_cpu_augment, batch_augment, get_rescale_normalize
 from utils.dataset_loaders import get_dataset
 
 # config
-from utils.config import hyperparams_train as hyperparameters
-from utils.config import parameters_base as parameters
+from utils.config import hyperparams_train as hyperparameters        # load hyperparameters from config
+from utils.config import ARCHITECTURES      
 from utils.config import LR_DECAY
 
 # eval helper
@@ -44,12 +44,20 @@ id = wandb.util.generate_id()
 NUM_WORKERS = 24
 PIN_MEMORY = True
 
-model_name = parameters['model_name']
 linprobe_layer = -1             # default to last layer for linear probing.
 
 # parseargs
 import argparse
 parser = argparse.ArgumentParser()
+parser.add_argument('--model',
+                    type = str,
+                    default = 'swin_t',
+                    help = "Model to train. Will load the config from utils.config.py. For Swin-T, use 'swin_t', and for Swin-B, use 'swin_b'. In order to change parameters, please modify the code there.")
+parser.add_argument('--detector',
+                    type = str,
+                    default = None,
+                    choices = [None, 'fast', 'orb', 'sift'],
+                    help = "The detector to use for obtaining keypoints. Valid options are 'fast', 'orb' and 'sift'. For SimMIM, use 'None'.")
 parser.add_argument("--linear_probing",
                     action = 'store_false',
                     help = 'Add this flag if you want to conduct linear probing. Absence of this flag will make the training default to finetuning.')
@@ -89,6 +97,11 @@ parser.add_argument('--model_save_interval',
                     help = 'Interval (in #epochs) for saving model checkpoints. Defaults to 100.')
 args = parser.parse_args()
 
+cfg = args.model
+parameters = ARCHITECTURES[cfg]
+
+model_name = parameters['model_name']
+kp_detector = args.detector
 finetuning = args.linear_probing
 KAMIM = args.KAMIM
 weight_ps = args.weight_ps
@@ -122,14 +135,14 @@ DEVICE = torch.device(device)
 
 # %%
 PROJECT_NAME = f'KAMIM ({process})'
-RUN_NAME = f'[{dataset}] {model_name} [{algo}]'
+RUN_NAME = f'[{dataset}] [{kp_detector}] {model_name} [{algo}]'
 MODEL_SAVE_PATH = f'Benchmarks/{dataset}/{model_name}/{process}/{algo}/checkpoint'
 WEIGHT_PATH = f'Models/{dataset}/{model_name}/{algo}/checkpoint_final.pth'
 
 if KAMIM is True:
-    WEIGHT_PATH = f'Models/{dataset}/{model_name}/{algo} - {weight_ps} - {TEMPERATURE}/checkpoint_final.pth'
-    RUN_NAME = f'[{dataset}] {model_name} [{algo}] [WP_Size = {weight_ps}] [T = {TEMPERATURE}]'
-    MODEL_SAVE_PATH = f'Benchmarks/{dataset}/{model_name}/{process}/{algo} - {weight_ps} -{TEMPERATURE}/checkpoint'
+    WEIGHT_PATH = f'Models/{dataset}/{model_name}/{algo} - {weight_ps} - {TEMPERATURE}/{kp_detector}/checkpoint_final.pth'      # IN weight
+    RUN_NAME = f'[{dataset}] [{kp_detector}] {model_name} [{algo}] [WP_Size = {weight_ps}] [T = {TEMPERATURE}]'
+    MODEL_SAVE_PATH = f'Benchmarks/{dataset}/{model_name}/{process}/{algo} - {weight_ps} - {TEMPERATURE}/{kp_detector}/checkpoint'
 print(WEIGHT_PATH)
 
 # %%
@@ -237,7 +250,9 @@ final_checkpoint = torch.load(WEIGHT_PATH,
                                   'cuda:0': 'cpu'
                                   }
                               )
-
+if type(final_checkpoint) == dict and 'model_state_dict' in final_checkpoint.keys():
+    final_checkpoint = final_checkpoint['model_state_dict']
+    
 model_state_dict = final_checkpoint
 
 backbone.load_state_dict(model_state_dict)
@@ -245,24 +260,24 @@ backbone.load_state_dict(model_state_dict)
 # %%
 backbone = backbone.base_model
 model = ClassificationModel(backbone,
-                            hidden_layer_dim = int(EMBED_DIM*WINDOW_SIZE),
+                            hidden_layer_dim = int(EMBED_DIM*8),
                             n_classes = NUM_CLASSES,
                             finetuning = finetuning,
                             linprobe_layer = linprobe_layer).to(DEVICE)
 
 # %%
-# summary(model, (BATCH_SIZE//accumulation_iter, 3, DIMENSION, DIMENSION), col_names = ['input_size', 'output_size', 'num_params', 'kernel_size'])
+summary(model, (BATCH_SIZE//accumulation_iter, 3, DIMENSION, DIMENSION), col_names = ['input_size', 'output_size', 'num_params', 'kernel_size'])
 
 # %%
 # linear probing
 import math
 
 if finetuning is False:
-    for param in model.vit_backbone.parameters():
+    for param in model.backbone.parameters():
         param.requires_grad = False
 
 #optimiser
-optim = torch.AdamW(model.parameters(),
+optim = torch.optim.AdamW(model.parameters(),
                           lr = LR,
                           weight_decay = weight_decay,
                           betas = [beta1, beta2],
@@ -318,6 +333,7 @@ wandb.init(
                 'KAMIM': KAMIM,
                 'temperature': TEMPERATURE,
                 'Weight patch size': weight_ps,
+                'Detector': kp_detector,
             }, 
         'linprobe_layer': linprobe_layer,
         # 'LR_decay': LR_DECAY
@@ -456,6 +472,12 @@ for epoch in range(CHKPT+1, EPOCHS+warmup_epochs):        # change back to 1
                     'epoch': epoch,
                     'model_state_dict':model.state_dict(),
                     'optim_state_dict': optim.state_dict(),
+                    'dataset': dataset,
+                    'detector': kp_detector,
+                    'train_loss': train_loss / samples,
+                    'val_loss': val_loss/val_samples,
+                    'val_acc_top1': val_acc_top1.compute().item(),
+                    'val_acc_top5': val_acc_top5.compute().item()
                     },
                 save_path
                 )
