@@ -1,0 +1,18 @@
+pandas
+numpy
+transformers
+wandb
+torchinfo
+torchmetrics
+tqdm
+matplotlib
+seaborn
+scikit-learn
+opencv-python
+opencv-contrib-python
+kornia
+kornia[x]
+pytorch_warmup
+albumentations
+timm
+# accimage               -- conda

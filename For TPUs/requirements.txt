@@ -1,0 +1,13 @@
+pandas
+numpy
+transformers
+wandb
+torchinfo
+torchmetrics
+tqdm
+matplotlib
+scikit-learn
+opencv-python
+opencv-contrib-python
+timm
+# accimage               -- conda
