@@ -1,5 +1,9 @@
 # README - "Keypoint Aware Masked Image Modeling" (KAMIM)
 
+Link to the paper: [https://arxiv.org/abs/2407.13873](https://arxiv.org/abs/2407.13873)
+
+Authors: Madhava Krishna, A V Subramanyam
+
 This repository contains code for "Keypoint Aware Masked Image Modeling" (KAMIM) including code for pre-training, finetuning, and representation and attention analysis.
 
 KAMIM attempts to exploit the differences in patches during SimMIM's reconstruction phase. This is done by using the density of keypoints extracted from handcrafted detectors like FAST (Rosten *et al.* ), SIFT (Lowe *et al.*) or ORB (Rublee *et al.*) to weight the reconstruction.
@@ -139,7 +143,7 @@ python3 finetune_swin.py \
 	--device=0 \
 	--accumulation=8 \
 	--save_interval=25 \
-	--model_save_interval=25 \
+	--model_save_interval=25
 ```
 
 By default, Swin transformers use the last layer for linear probing, which already uses layernorm.
